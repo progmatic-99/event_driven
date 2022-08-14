@@ -61,7 +61,7 @@ async def create(req: Request):
         delivery_id=delivery.pk, type=body["type"], data=json.dumps(body["data"])
     ).save()
 
-    state = consumers.create_delivery({}, event)
+    state = consumers.CONSUMERS[event.type]({}, event)
 
     # set the redis cache
     redis.set(f"delivery: {delivery.pk}", json.dumps(state))
@@ -69,5 +69,18 @@ async def create(req: Request):
     return state
 
 
+@app.post("/event")
 async def dispatch(req: Request):
-    pass
+    body = await req.json()
+    delivery_id = body["delivery_id"]
+
+    event = Event(
+        delivery_id=delivery_id, type=body["type"], data=json.dumps(body["data"])
+    ).save()
+
+    state = await get_state(delivery_id)
+    new_state = consumers.CONSUMERS[event.type](state, event)
+
+    redis.set(f"delivery: {delivery_id}", json.dumps(new_state))
+
+    return new_state
